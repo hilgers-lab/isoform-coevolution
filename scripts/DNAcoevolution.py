@@ -107,7 +107,7 @@ def main(msa_file, outdir, tsv, gene_id, from_array):
 
 
     ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
-              loc='upper left', bbox_to_anchor=(0.7, 1.04))
+              loc='lower left', bbox_to_anchor=(0.7, 1.04))
 
     # save clustermap to file
     clustermap_path = outdir / 'clustermap.png'
