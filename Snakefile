@@ -1,12 +1,37 @@
 import os
 import glob
 from os.path import join as pjoin
+import pandas as pd
 
 MAFS = glob.glob('input/mafs/*.maf')
 LABELS, = glob_wildcards('input/gff/{label}GenesRegions.gff')
 
+BOX_CSV = config['gene_regions_csv']
+box_df = pd.read_csv(BOX_CSV, index_col=False, 
+                        header=0)
+
+box_genes = list(box_df['gene_id'])
+box_tissues = list(box_df['tissue'])
+
+box_plot_dirs = expand(
+    "output/coevo/label-{label}_gene-{gene}_tissue-{tissue}/",
+    zip,
+    label=box_df['geneType'],
+    gene=box_df['gene_id'],
+    tissue=box_df['tissue'],
+)
+
+
+rule flags: 
+    input: 
+        expand('flags/{label}.done', label=LABELS)
+    output: 
+        'flags/all.done'
+
 rule all: 
-    input: expand('flags/{label}.done', label=LABELS)
+    input: 
+        flags='flags/all.done',    
+        box_plots=box_plot_dirs
 
 
 # output a MAF file for each gene
@@ -31,7 +56,7 @@ def get_file_names(wc):
     "Here be magic"
     ck_output = checkpoints.gff_to_mafs.get(**wc).output['maf_dir']
     GENES, = glob_wildcards(pjoin(ck_output, '{gene}.maf'))
-    return expand('figures/{label}/{gene}_coevo.png', gene=GENES, label=wc.label)
+    return expand('output/coevo-plain/label-{label}_gene-{gene}', gene=GENES, label=wc.label)
 
 
 rule almost_done: 
@@ -51,44 +76,59 @@ rule maf_to_fa:
         "export SPECIES=$(maf_species_in_all_files.py {input}); "
         "maf_to_concat_fasta.py $SPECIES < {input} > {output}"
 
-# if there is a TSV with the following columns: 
-# chr, start, end, feature at the given path tsv/label/gene.tsv
-# then color in the respective rectangles in the 2D array and output the 
-# average for each rectangle
-def _covariance_gene_input(wc):
-    tsv_path = 'tsv/{}/{}.tsv'.format(wc.label, wc.gene):
-    return '-t {}'.format(tsv_path) if os.path.exists(tsv_path) else ''
-
-rule dna_coevo: 
+# temporarily store the matrix since we read it multiple times
+rule dna_coevo_matrix: 
     input: 
         'fasta/{label}/{gene}.fasta'
     output: 
-        directory('output/{label}/{gene})'
-    params: 
-        tsv=_covariance_gene_tsv
+        'matrix/{label}/{gene}.mat'
     conda: 
         'envs/coevo.yaml'
+    benchmark: 
+        'benchmarks/dna_coevo_matrix/label-{label}_gene-{gene}.txt'
+    resources: 
+        mem_mb=64000
     shell: 
         "python scripts/DNAcoevolution.py "
-        "-i {input.fasta} "
-        "{params.tsv} "
+        "-i {input} "
+        "-s {output} "
+
+rule dna_coevo_plain: 
+    input: 
+        mat='matrix/{label}/{gene}.mat'
+    output: 
+        directory('output/coevo-plain/label-{label}_gene-{gene}')
+    conda: 
+        'envs/coevo.yaml'
+    resources: 
+        mem_mb=64000
+    benchmark: 
+        'benchmarks/dna_coevo_plain/label-{label}_gene-{gene}.txt'
+    shell: 
+        "python scripts/DNAcoevolution.py "
+        "-a {input.mat} "
         "-o {output} "
 
-checkpoint tsv_genes:
+
+rule dna_coevo_box: 
     input: 
-        config['input/gene_regions.tsv']
+        mat='matrix/{label}/{gene}.mat',
+        csv='config/all_box_genes.csv'
     output: 
-        touch('flags/tsv_genes.checkpoint')
-
-
-def get_tsv_gene_names(wc):
-    "Here be magic"
-    ck_output = checkpoints.tsv_genes.get(**wc).output[0]
-    df = pd.read_table(ck_output).set_index('gene_id')
-    genes = list(df.index)
-    return expand('figures/{label}/{gene}_coevo_with_boxes.png', 
-                  gene=GENES, label=wc.label)
-
+        directory('output/coevo-box/label-{label}_gene-{gene}_tissue-{tissue}')
+    conda: 
+        'envs/coevo.yaml'
+    resources: 
+        mem_mb=64000
+    benchmark: 
+        'benchmarks/dna_coevo_box/label-{label}_gene-{gene}_tissue-{tissue}.txt'
+    shell: 
+        "python scripts/DNAcoevolution.py "
+        "-a {input.mat} "
+        "-c {input.csv} "
+        "-o {output} "
+        "-g {wildcards.gene} "
+        "-u {wildcards.tissue} "
 
 # rule covariance_gene_level:
 #     input: 
