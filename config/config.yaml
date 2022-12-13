@@ -1,1 +1,1 @@
-gene_regions_tsv: input/gene_regions.tsv
+gene_regions_csv: config/all_box_genes.csv
