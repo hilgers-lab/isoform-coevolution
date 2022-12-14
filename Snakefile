@@ -81,50 +81,56 @@ rule dna_coevo_matrix:
     input: 
         'fasta/{label}/{gene}.fasta'
     output: 
-        'matrix/{label}/{gene}.mat'
+        raw_mat='matrix/{label}/{gene}_raw.mat',
+        refined_mat='matrix/{label}/{gene}_refined.mat'
     conda: 
         'envs/coevo.yaml'
     benchmark: 
         'benchmarks/dna_coevo_matrix/label-{label}_gene-{gene}.txt'
     resources: 
-        mem_mb=64000
+        mem_mb=40000
     shell: 
         "python scripts/DNAcoevolution.py "
         "-i {input} "
-        "-s {output} "
+        "-s {output.raw_mat} "
+        "-v {output.refined_mat} "
 
 rule dna_coevo_plain: 
     input: 
-        mat='matrix/{label}/{gene}.mat'
+        raw_mat='matrix/{label}/{gene}_raw.mat',
+        refined_mat='matrix/{label}/{gene}_refined.mat'
     output: 
         directory('output/coevo-plain/label-{label}_gene-{gene}')
     conda: 
         'envs/coevo.yaml'
     resources: 
-        mem_mb=64000
+        mem_mb=40000
     benchmark: 
         'benchmarks/dna_coevo_plain/label-{label}_gene-{gene}.txt'
     shell: 
         "python scripts/DNAcoevolution.py "
-        "-a {input.mat} "
+        "-a {input.raw_mat} "
+        "-r {input.refined_mat} "
         "-o {output} "
 
 
 rule dna_coevo_box: 
     input: 
-        mat='matrix/{label}/{gene}.mat',
+        raw_mat='matrix/{label}/{gene}_raw.mat',
+        refined_mat='matrix/{label}/{gene}_refined.mat',
         csv='config/all_box_genes.csv'
     output: 
         directory('output/coevo-box/label-{label}_gene-{gene}_tissue-{tissue}')
     conda: 
         'envs/coevo.yaml'
     resources: 
-        mem_mb=64000
+        mem_mb=40000
     benchmark: 
         'benchmarks/dna_coevo_box/label-{label}_gene-{gene}_tissue-{tissue}.txt'
     shell: 
         "python scripts/DNAcoevolution.py "
-        "-a {input.mat} "
+        "-a {input.raw_mat} "
+        "-r {input.refined_mat} "
         "-c {input.csv} "
         "-o {output} "
         "-g {wildcards.gene} "
