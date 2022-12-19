@@ -19,7 +19,7 @@ REGIONS_OF_INTEREST = [
     'control5utr',
     'targetsTSS',
     'target5utr',
-    'cdsexons'
+    'cdsexons',
     'utr3Segment',
     'utr3segs.distalSegment',
 ]
@@ -81,9 +81,8 @@ def build_mutinfo_from_msa(msa_file):
               type=click.Path(exists=True))
 @click.option('-v', '--save-refined-array', required=False, 
               type=click.Path(exists=False, path_type=Path))
-@click.option('-u', '--tissue', type=str, required=False)
 def main(msa_file, outdir, gene_id, csv, from_array, save_array, 
-         from_refined_array, save_refined_array, tissue):
+         from_refined_array, save_refined_array):
     # if we have already saved the array, just read it in
     if from_array is not None: 
         print('Reading in file from {}...'.format(from_array), file=sys.stderr)
@@ -114,35 +113,53 @@ def main(msa_file, outdir, gene_id, csv, from_array, save_array,
         for mat_label, mat in (('raw_mutinfo', mutinfo04), 
                                ('corrected_mutinfo', mutinfo_corr04)):
             ga = sns.clustermap(mat, row_cluster=False, 
-                            col_cluster=False, vmin=0,vmax=0.3)
+                                col_cluster=False, vmin=0,vmax=0.3)
             ax = ga.ax_heatmap
+            
+            # save clustermap to file
+            clustermap_path = outdir / '{}_clustermap.png'.format(mat_label)
+            plt.show()
+            plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
+                #import pdb; pdb.set_trace()
 
-            # dict of color, label for legend
-            legend_handles = []
-            avgs = []
+            showMutinfoMatrix(mat, clim=[0, mat.max()], 
+                              vmin=0, vmax=0.3)
+            corr03_path = outdir / '{}.othervmax03.png'.format(mat_label)
+            plt.savefig(corr03_path, dpi=300, bbox_inches='tight')
+            plt.clf()
 
             if csv is not None:
                 df = pd.read_csv(csv, index_col=None, header=0)
 
                 # subset on gene_id and tissue
-                gene_row = df[(df['gene_id'] == gene_id) & (df['tissue' == tissue])]
+                gene_rows = df[df['gene_id'] == gene_id]
 
-                # check that there is only a single match
-                assert len(gene_row) == 1
-                
-                # turn into pandas Series
-                gene_row = gene_row.iloc[0]
+                for __, gene_row in gene_rows.iterrows():
+                    tissue = gene_row['tissue']
+        
+                    # dict of color, label for legend
+                    legend_handles = []
+                    avgs = []
 
-                for color, region in zip(COLORS, REGIONS_OF_INTEREST):
-                    if region not in gene_row or pd.isna(gene_row[region]):
-                        continue
-                        
-                    # already normalized to gene start
-                    start, end = get_region(gene_row, region)
-                    box_length = end - start
-                    ax.add_patch(Rectangle((start, start), box_length, box_length, 
-                                 fill=False, edgecolor=color, lw=3))
-                    legend_handles.append({'color': color, 'label': region})
+                    plt.clf()
+
+                    ga = sns.clustermap(mat, row_cluster=False, 
+                                        col_cluster=False, vmin=0,vmax=0.3)
+                    ax = ga.ax_heatmap
+            
+                    # save clustermap to file
+                    clustermap_path = outdir / '{}_tissue-{}_clustermap.png'.format(mat_label, tissue)
+
+                    for color, region in zip(COLORS, REGIONS_OF_INTEREST):
+                        if region not in gene_row or pd.isna(gene_row[region]):
+                            continue
+                            
+                        # already normalized to gene start
+                        start, end = get_region(gene_row, region)
+                        box_length = end - start
+                        ax.add_patch(Rectangle((start, start), box_length, box_length, 
+                                    fill=False, edgecolor=color, lw=3))
+                        legend_handles.append({'color': color, 'label': region})
 
                     # compare all regions to all regions
                     for (region_x, region_y) in combinations_with_replacement(
@@ -159,33 +176,26 @@ def main(msa_file, outdir, gene_id, csv, from_array, save_array,
                         mean_region = region_of_interest.mean()
                         mean_row = row_of_interest.mean()
                         pval = ttest_1samp(region_of_interest.flatten(), 
-                                           row_of_interest.mean(), 
-                                           alternative='greater').pvalue
+                                        row_of_interest.mean(), 
+                                        alternative='greater').pvalue
                         avgs.append([region_x, region_y, mean_region, mean_row, pval])
 
-                if avgs: 
-                    avg_df = pd.DataFrame(avgs)
-                    avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
-                    avg_path = outdir / '{}_regions.tsv'.format(mat_label)
-                    avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
+                    if avgs: 
+                        avg_df = pd.DataFrame(avgs)
+                        avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
+                        avg_path = outdir / '{}_tissue-{}_regions.tsv'.format(mat_label, tissue)
+                        avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
 
-            ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
-                      loc='lower left', bbox_to_anchor=(0.7, 1.04))
+                    ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
+                              loc='lower left', bbox_to_anchor=(0.7, 1.04))
 
-            # save clustermap to file
-            clustermap_path = outdir / '{}_clustermap.png'.format(mat_label)
-            plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
-            #import pdb; pdb.set_trace()
-            plt.show()
-            # plotting mut info corr
+                    plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
+                    #import pdb; pdb.set_trace()
+                    plt.show()
+                    # plotting mut info corr
 
-            plt.clf()
+                    plt.clf()
 
-            showMutinfoMatrix(mat, clim=[0, mat.max()], 
-                              vmin=0, vmax=0.3)
-            corr03_path = outdir / '{}.othervmax03.png'.format(mat_label)
-            plt.savefig(corr03_path, dpi=300, bbox_inches='tight')
-            plt.clf()
             # plt.show()
             # plt.clf()
             # corr04_path = outdir / 'mutinfo_corr04.othervmax04.png'
