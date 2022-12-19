@@ -10,17 +10,13 @@ BOX_CSV = config['gene_regions_csv']
 box_df = pd.read_csv(BOX_CSV, index_col=False, 
                         header=0)
 
-box_genes = list(box_df['gene_id'])
-box_tissues = list(box_df['tissue'])
+box_genes = list(box_df['gene_id'].unique())
 
 box_plot_dirs = expand(
-    "output/coevo/label-{label}_gene-{gene}_tissue-{tissue}/",
-    zip,
-    label=box_df['geneType'],
-    gene=box_df['gene_id'],
-    tissue=box_df['tissue'],
+    "output/coevo-box/label-{label}_gene-{gene}/",
+    label=LABELS,
+    gene=box_genes,
 )
-
 
 rule flags: 
     input: 
@@ -30,8 +26,7 @@ rule flags:
 
 rule all: 
     input: 
-        flags='flags/all.done',    
-        box_plots=box_plot_dirs
+        box_plot_dirs
 
 
 # output a MAF file for each gene
@@ -52,12 +47,12 @@ checkpoint gff_to_mafs:
         "sed 's/\\\"//g' > {output.tmp_bed}; " # remove pesky quotes
         "mafsInRegion {output.tmp_bed} -outDir {output.maf_dir} {input.mafs}"
 
+   
 def get_file_names(wc):
     "Here be magic"
     ck_output = checkpoints.gff_to_mafs.get(**wc).output['maf_dir']
     GENES, = glob_wildcards(pjoin(ck_output, '{gene}.maf'))
-    return expand('output/coevo-plain/label-{label}_gene-{gene}', gene=GENES, label=wc.label)
-
+    return expand('output/coevo-box/label-{label}_gene-{gene}', gene=GENES, label=wc.label)
 
 rule almost_done: 
     input: get_file_names
@@ -75,6 +70,8 @@ rule maf_to_fa:
     shell: 
         "export SPECIES=$(maf_species_in_all_files.py {input}); "
         "maf_to_concat_fasta.py $SPECIES < {input} > {output}"
+
+
 
 # temporarily store the matrix since we read it multiple times
 rule dna_coevo_matrix: 
@@ -116,25 +113,23 @@ rule dna_coevo_plain:
 
 rule dna_coevo_box: 
     input: 
-        raw_mat='matrix/{label}/{gene}_raw.mat',
-        refined_mat='matrix/{label}/{gene}_refined.mat',
-        csv='config/all_box_genes.csv'
+        fasta='fasta/{label}/{gene}.fasta',
+        csv='config/all_box_genes.csv',
     output: 
-        directory('output/coevo-box/label-{label}_gene-{gene}_tissue-{tissue}')
+        directory('output/coevo-box/label-{label}_gene-{gene}')
     conda: 
         'envs/coevo.yaml'
     resources: 
-        mem_mb=40000
+        mem_mb=80000,
+        disk_mb=40000
     benchmark: 
-        'benchmarks/dna_coevo_box/label-{label}_gene-{gene}_tissue-{tissue}.txt'
+        'benchmarks/dna_coevo_box/label-{label}_gene-{gene}.txt'
     shell: 
-        "python scripts/DNAcoevolution.py "
-        "-a {input.raw_mat} "
-        "-r {input.refined_mat} "
+        "python scripts/DNAcoevolution2.py "
+        "-i {input.fasta} "
         "-c {input.csv} "
         "-o {output} "
         "-g {wildcards.gene} "
-        "-u {wildcards.tissue} "
 
 # rule covariance_gene_level:
 #     input: 
