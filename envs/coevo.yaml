@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies: 
+  - prody
+  - matplotlib
+  - seaborn
+  - click
+  - pandas
