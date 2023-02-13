@@ -110,97 +110,100 @@ def main(msa_file, outdir, gene_id, csv, from_array, save_array,
     if outdir is not None: 
         # initiate directories
         os.makedirs(outdir, exist_ok=True)
-        for mat_label, mat in (('raw_mutinfo', mutinfo04), 
-                               ('corrected_mutinfo', mutinfo_corr04)):
+
+
+    del mutinfo04
+    mat_label, mat = ('corrected_mutinfo', mutinfo_corr04)
+
+    ga = sns.clustermap(mat, row_cluster=False, 
+                        col_cluster=False, vmin=0,vmax=0.3)
+    ax = ga.ax_heatmap
+    
+    # save clustermap to file
+    clustermap_path = outdir / '{}_clustermap.png'.format(mat_label)
+    plt.show()
+    plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
+        #import pdb; pdb.set_trace()
+
+    showMutinfoMatrix(mat, clim=[0, mat.max()], 
+                      vmin=0, vmax=0.3)
+    corr03_path = outdir / '{}.othervmax03.png'.format(mat_label)
+    plt.savefig(corr03_path, dpi=300, bbox_inches='tight')
+    plt.clf()
+
+    if csv is not None:
+        df = pd.read_csv(csv, index_col=None, header=0)
+
+        # subset on gene_id and tissue
+        gene_rows = df[df['gene_id'] == gene_id]
+
+        for __, gene_row in gene_rows.iterrows():
+            tissue = gene_row['tissue']
+
+            # dict of color, label for legend
+            legend_handles = []
+            avgs = []
+
+            plt.clf()
+
             ga = sns.clustermap(mat, row_cluster=False, 
                                 col_cluster=False, vmin=0,vmax=0.3)
             ax = ga.ax_heatmap
-            
+    
             # save clustermap to file
-            clustermap_path = outdir / '{}_clustermap.png'.format(mat_label)
-            plt.show()
-            plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
-                #import pdb; pdb.set_trace()
+            clustermap_path = outdir / '{}_tissue-{}_clustermap.png'.format(mat_label, tissue)
 
-            showMutinfoMatrix(mat, clim=[0, mat.max()], 
-                              vmin=0, vmax=0.3)
-            corr03_path = outdir / '{}.othervmax03.png'.format(mat_label)
-            plt.savefig(corr03_path, dpi=300, bbox_inches='tight')
+            for color, region in zip(COLORS, REGIONS_OF_INTEREST):
+                if region not in gene_row or pd.isna(gene_row[region]):
+                    continue
+                    
+                # already normalized to gene start
+                start, end = get_region(gene_row, region)
+                box_length = end - start
+                ax.add_patch(Rectangle((start, start), box_length, box_length, 
+                            fill=False, edgecolor=color, lw=3))
+                legend_handles.append({'color': color, 'label': region})
+
+            # compare all regions to all regions
+            for (region_x, region_y) in combinations_with_replacement(
+                REGIONS_OF_INTEREST, 2
+            ):
+
+                # set start and end for both regions
+                ((start_x, end_x), (start_y, end_y)) = (
+                    get_region(gene_row, region) for region in (region_x, region_y)
+                )
+
+                region_of_interest = mat[start_x:end_x, start_y:end_y]
+                row_of_interest = mat[:, start_y:end_y]
+                mean_region = region_of_interest.mean()
+                mean_row = row_of_interest.mean()
+                pval = ttest_1samp(region_of_interest.flatten(), 
+                                row_of_interest.mean(), 
+                                alternative='greater').pvalue
+                avgs.append([region_x, region_y, mean_region, mean_row, pval])
+
+            if avgs: 
+                avg_df = pd.DataFrame(avgs)
+                avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
+                avg_path = outdir / '{}_tissue-{}_regions.tsv'.format(mat_label, tissue)
+                avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
+
+            ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
+                      loc='lower left', bbox_to_anchor=(0.7, 1.04))
+
+            plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
+            #import pdb; pdb.set_trace()
+            plt.show()
+            # plotting mut info corr
+
             plt.clf()
 
-            if csv is not None:
-                df = pd.read_csv(csv, index_col=None, header=0)
-
-                # subset on gene_id and tissue
-                gene_rows = df[df['gene_id'] == gene_id]
-
-                for __, gene_row in gene_rows.iterrows():
-                    tissue = gene_row['tissue']
-        
-                    # dict of color, label for legend
-                    legend_handles = []
-                    avgs = []
-
-                    plt.clf()
-
-                    ga = sns.clustermap(mat, row_cluster=False, 
-                                        col_cluster=False, vmin=0,vmax=0.3)
-                    ax = ga.ax_heatmap
-            
-                    # save clustermap to file
-                    clustermap_path = outdir / '{}_tissue-{}_clustermap.png'.format(mat_label, tissue)
-
-                    for color, region in zip(COLORS, REGIONS_OF_INTEREST):
-                        if region not in gene_row or pd.isna(gene_row[region]):
-                            continue
-                            
-                        # already normalized to gene start
-                        start, end = get_region(gene_row, region)
-                        box_length = end - start
-                        ax.add_patch(Rectangle((start, start), box_length, box_length, 
-                                    fill=False, edgecolor=color, lw=3))
-                        legend_handles.append({'color': color, 'label': region})
-
-                    # compare all regions to all regions
-                    for (region_x, region_y) in combinations_with_replacement(
-                        REGIONS_OF_INTEREST, 2
-                    ):
-
-                        # set start and end for both regions
-                        ((start_x, end_x), (start_y, end_y)) = (
-                            get_region(gene_row, region) for region in (region_x, region_y)
-                        )
-
-                        region_of_interest = mat[start_x:end_x, start_y:end_y]
-                        row_of_interest = mat[:, start_y:end_y]
-                        mean_region = region_of_interest.mean()
-                        mean_row = row_of_interest.mean()
-                        pval = ttest_1samp(region_of_interest.flatten(), 
-                                        row_of_interest.mean(), 
-                                        alternative='greater').pvalue
-                        avgs.append([region_x, region_y, mean_region, mean_row, pval])
-
-                    if avgs: 
-                        avg_df = pd.DataFrame(avgs)
-                        avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
-                        avg_path = outdir / '{}_tissue-{}_regions.tsv'.format(mat_label, tissue)
-                        avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
-
-                    ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
-                              loc='lower left', bbox_to_anchor=(0.7, 1.04))
-
-                    plt.savefig(clustermap_path, dpi=300, bbox_inches='tight')
-                    #import pdb; pdb.set_trace()
-                    plt.show()
-                    # plotting mut info corr
-
-                    plt.clf()
-
-            # plt.show()
-            # plt.clf()
-            # corr04_path = outdir / 'mutinfo_corr04.othervmax04.png'
-            # showMutinfoMatrix(mutinfo_corr04, clim=[0, mutinfo_corr04.max()],vmin=0,vmax=0.4)
-            # plt.savefig(corr04_path, dpi=300, bbox_inches='tight')
+    # plt.show()
+    # plt.clf()
+    # corr04_path = outdir / 'mutinfo_corr04.othervmax04.png'
+    # showMutinfoMatrix(mutinfo_corr04, clim=[0, mutinfo_corr04.max()],vmin=0,vmax=0.4)
+    # plt.savefig(corr04_path, dpi=300, bbox_inches='tight')
 
     # TODO intersections between every feature compared toutr3Region and distalutr3Region
     # mean of backgrounds -> select 100 at random (or so) of same length (w/o replace)
