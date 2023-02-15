@@ -52,7 +52,7 @@ def get_file_names(wc):
     "Here be magic"
     ck_output = checkpoints.gff_to_mafs.get(**wc).output['maf_dir']
     GENES, = glob_wildcards(pjoin(ck_output, '{gene}.maf'))
-    return expand('output/coevo-box/label-{label}_gene-{gene}', gene=GENES, label=wc.label)
+    return expand('output/coevo-box/label-{label}_gene-{gene}/corrected_mutinfo_clustermap.png', gene=GENES, label=wc.label)
 
 rule almost_done: 
     input: get_file_names
@@ -116,19 +116,20 @@ rule dna_coevo_box:
         fasta='fasta/{label}/{gene}.fasta',
         csv='config/all_box_genes.csv',
     output: 
-        directory('output/coevo-box/label-{label}_gene-{gene}')
+        dirname=directory('output/coevo-box/label-{label}_gene-{gene}'),
+        clustermap='output/coevo-box/label-{label}_gene-{gene}/corrected_mutinfo_clustermap.png'
     conda: 
         'envs/coevo.yaml'
     resources: 
-        mem_mb=80000,
+        mem_mb=200000,
         disk_mb=40000
     benchmark: 
         'benchmarks/dna_coevo_box/label-{label}_gene-{gene}.txt'
     shell: 
-        "python scripts/DNAcoevolution2.py "
+        "python scripts/DNAcoevolution.py "
         "-i {input.fasta} "
         "-c {input.csv} "
-        "-o {output} "
+        "-o {output.dirname} "
         "-g {wildcards.gene} "
 
 # rule covariance_gene_level:

@@ -69,6 +69,7 @@ def build_mutinfo_from_msa(msa_file):
     return mutinfo04
 
 @click.command()
+@click.option('-p', '--pvals', is_flag=True)
 @click.option('-i', '--msa-file', type=click.Path(exists=True), required=False)
 @click.option('-o', '--outdir', type=click.Path(exists=False, path_type=Path), required=False)
 @click.option('-g', '--gene-id', type=str, required=False)
@@ -82,7 +83,7 @@ def build_mutinfo_from_msa(msa_file):
 @click.option('-v', '--save-refined-array', required=False, 
               type=click.Path(exists=False, path_type=Path))
 def main(msa_file, outdir, gene_id, csv, from_array, save_array, 
-         from_refined_array, save_refined_array):
+         from_refined_array, save_refined_array, pvals):
     # if we have already saved the array, just read it in
     if from_array is not None: 
         print('Reading in file from {}...'.format(from_array), file=sys.stderr)
@@ -132,7 +133,7 @@ def main(msa_file, outdir, gene_id, csv, from_array, save_array,
     plt.clf()
 
     if csv is not None:
-        df = pd.read_csv(csv, index_col=None, header=0)
+        df = pd.read_csv(csv, index_col=None, header=0, dtype=str)
 
         # subset on gene_id and tissue
         gene_rows = df[df['gene_id'] == gene_id]
@@ -165,29 +166,36 @@ def main(msa_file, outdir, gene_id, csv, from_array, save_array,
                 legend_handles.append({'color': color, 'label': region})
 
             # compare all regions to all regions
-            for (region_x, region_y) in combinations_with_replacement(
-                REGIONS_OF_INTEREST, 2
-            ):
+            if pvals: 
+                for (region_x, region_y) in combinations_with_replacement(
+                    REGIONS_OF_INTEREST, 2
+                ):
 
-                # set start and end for both regions
-                ((start_x, end_x), (start_y, end_y)) = (
-                    get_region(gene_row, region) for region in (region_x, region_y)
-                )
+                    if region_x not in gene_row or pd.isna(gene_row[region_x]):
+                        continue
 
-                region_of_interest = mat[start_x:end_x, start_y:end_y]
-                row_of_interest = mat[:, start_y:end_y]
-                mean_region = region_of_interest.mean()
-                mean_row = row_of_interest.mean()
-                pval = ttest_1samp(region_of_interest.flatten(), 
-                                row_of_interest.mean(), 
-                                alternative='greater').pvalue
-                avgs.append([region_x, region_y, mean_region, mean_row, pval])
+                    if region_y not in gene_row or pd.isna(gene_row[region_y]):
+                        continue
 
-            if avgs: 
-                avg_df = pd.DataFrame(avgs)
-                avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
-                avg_path = outdir / '{}_tissue-{}_regions.tsv'.format(mat_label, tissue)
-                avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
+                    # set start and end for both regions
+                    ((start_x, end_x), (start_y, end_y)) = (
+                        get_region(gene_row, region) for region in (region_x, region_y)
+                    )
+
+                    region_of_interest = mat[start_x:end_x, start_y:end_y]
+                    row_of_interest = mat[:, start_y:end_y]
+                    mean_region = region_of_interest.mean()
+                    mean_row = row_of_interest.mean()
+                    pval = ttest_1samp(region_of_interest.flatten(), 
+                                    row_of_interest.mean(), 
+                                    alternative='greater').pvalue
+                    avgs.append([region_x, region_y, mean_region, mean_row, pval])
+
+                if avgs: 
+                    avg_df = pd.DataFrame(avgs)
+                    avg_df.columns = ['REGION_X', 'REGION_Y', 'MEAN_X_VS_Y', 'MEAN_Y', 'P_VAL']
+                    avg_path = outdir / '{}_tissue-{}_regions.tsv'.format(mat_label, tissue)
+                    avg_df.to_csv(avg_path, sep='\t', header=True, index=False)
 
             ax.legend(handles=[Patch(**kwargs) for kwargs in legend_handles], 
                       loc='lower left', bbox_to_anchor=(0.7, 1.04))
