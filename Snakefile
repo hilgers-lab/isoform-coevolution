@@ -121,8 +121,8 @@ rule dna_coevo_box:
     conda: 
         'envs/coevo.yaml'
     resources: 
-        mem_mb=200000,
-        disk_mb=40000
+        mem_mb=1250000,
+        disk_mb=50000
     benchmark: 
         'benchmarks/dna_coevo_box/label-{label}_gene-{gene}.txt'
     shell: 
@@ -131,6 +131,7 @@ rule dna_coevo_box:
         "-c {input.csv} "
         "-o {output.dirname} "
         "-g {wildcards.gene} "
+        "--pvals "
 
 # rule covariance_gene_level:
 #     input: 
