@@ -9,6 +9,8 @@ A set of figures are output with optional boxes around the set of regions promot
 
 Download MAFs from [UCSC](https://hgdownload.soe.ucsc.edu/goldenPath/dm6/multiz27way/maf/) to `input/mafs`. 
 
+Install `snakemake` e.g. from bioconda using `conda install -c bioconda snakemake`. 
+
 ## Run 
 
 Edit run.sh to suit your computational resources, then execute run.sh.
